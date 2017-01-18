@@ -1,0 +1,114 @@
+---
+title: "Return calcs - S&P"
+output: html_notebook
+---
+
+```{r, include=FALSE}
+#clear workspace
+rm(list = ls())
+
+#load packages
+library(tidyverse)
+require(quantstrat)
+```
+
+```{r, include=FALSE}
+#import pricing
+symbols <- c("SP500","TBills") #,"EAFE","US10YR","GSCI","NAREIT")
+
+getSymbols(symbols,
+           src = "csv",
+           dir="FinalData",
+           col.names=c("Close"))
+```
+
+```{r}
+AllAssets <- cbind.xts(Cl(SP500),
+                       Cl(TBILLS))#,Cl(US10YR), Cl(GSCI),Cl(NAREIT))    
+
+#create dataframe - tidyverse not compatible with xts?
+AllAssets.df <- data.frame(date=index(AllAssets), coredata(AllAssets)) #, row.names = index(AllAssets))
+
+```
+
+
+```{r}
+#mutate new columns
+AllAssets.df  <- mutate(AllAssets.df, 
+  "10mSMA" = rollmean(SP500.Close,10,fill = 0,align = "right"),
+  "Asset.ret" = c(0,diff(SP500.Close)/lag(SP500.Close)[-1]),
+  "Rf.ret" = lag((TBILLS.Close/100)/12),
+  "signal" = lag(ifelse(SP500.Close>`10mSMA`,1,0)),
+  "Timing.ret" = ifelse(signal == 1,Asset.ret,Rf.ret) 
+)
+
+rownames(AllAssets.df) <- index(AllAssets)
+```
+
+####To do:
+
+* check lag correct
+* run over 1900 data / other assets
+
+####Convert back to xts to be able to subset?
+
+```{r}
+AllAssets <- as.xts(AllAssets.df[,-1])
+```
+
+```{r}
+Returns <- cbind.xts(AllAssets$Asset.ret, AllAssets$Timing.ret)["1972-12-31::2012-12-31"]
+```
+
+####Stats
+
+```{r}
+stats <- rbind(Return.annualized(Returns,scale = 12)*100, 
+               StdDev.annualized(Returns,scale = 12)*100, 
+               SharpeRatio.annualized(Returns,Rf = 0.0541/12),
+               maxDrawdown(Returns,scale = 12)*100,
+               c(nrow(subset(Returns, Returns$Asset.ret >= 0))/nrow(Returns),nrow(subset(Returns, Returns$Timing.ret >= 0))/nrow(Returns)))
+
+colnames(stats) <- c("S&P 500", "Timing")
+rownames(stats) <- c("Returns","Volatility","Sharpe","MaxDD","% Positive Months")#,"$100 becomes","Inflation CAGR")
+stats
+```
+
+#### to do:
+
+* round / format with % symbol
+
+####Charts 
+
+```{r}
+charts.PerformanceSummary(Returns,
+                          main = "S&P 500 Total Returns vs Timing Total Returns (1973-2012)",
+                          date.format = "%Y",
+                          colorset = c(4,2),
+                          ylog = FALSE,
+                          minor.ticks =FALSE)
+```
+
+```{r}
+charts.RollingPerformance(Returns,
+                          width = 12,
+                          main = "S&P 500 12M Rolling Total Returns vs Timing 12M Rolling  Total Returns (1973-2012)",
+                          date.format = "%Y",
+                          colorset = c(4,2),
+                          ylog = FALSE,
+                          minor.ticks =FALSE)
+```
+
+to do
+
+* make it easy to see difference, explore different widths/periods, add legend
+
+####To do:
+
+* format charts - e.g. log chart, start at 100, colours
+* get data back to 1900
+* create % positive months, $100 becomes, inflation CAGR etc
+* Get ten worst years
+* rolling returns / alpha
+
+
