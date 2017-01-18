@@ -1,0 +1,158 @@
+---
+title: "Reproduction of Faber 2012"
+output: html_notebook
+---
+
+###Introduction
+
+Mebane Faber released a paper in 2006 (http://papers.ssrn.com/sol3/papers.cfm?abstract_id=962461) which applies a trend following market timing model to manage risk on a portfolio equally weighted with 5 asset classes (20% US Large Cap Equities, 20% Foreign Developed Equities, 20% US 10yr Gov Bonds, 20% commodities and 20% real estate).
+ 
+The results showed the simple moving average based market timing system commonly used in CTAs could be applied to asset allocation to significant improve the performance and risk metrics compared to a standard buy and hold strategy. Depending on the moving average period used, the market timing system had similar or slightly better returns (9.54-10.73% CAGR vs 9.92% CAGR) to the buy and hold strategy. However, the timing system reduced volatility from 10.28% to 6.83%-7.09%, improving the sharpe ratio (rf 5.41%) from 0.44 to 0.60-0.77. Max DD was also significantly improved from 46% to 9.76%-17.42%.
+
+###Replicating the original research
+
+####Data used
+
+Faber's model is applied to 5 asset classes - US Equities, Foreign Develeped country equities, Fixed Income, Commodities and Real Assets/Real estate. He uses the following data series to represent these asset classes. 
+
+- S&P 500
+- MSCI EAFE
+- US 10 Year Government Bonds
+- Goldman Sachs Commodity Index
+- NAREIT Index
+
+All data series are total return series including dividends and income. Monthly data is used over the period 1972-2012 which i have extended to include up to the end of 2016 for further analysis.
+
+The data provider for Fabers research is Global Financial Data -  unfortunately a paid service i could get access to.
+
+4 of the 5 indices were available on Bloomberg. The US 10 Yr Government bonds total returns index had to be recreated using yields available on FRED. Although there are small discrepancies in performance statistics i am confident the data is close enough to the original data that it can be used.See appendix for more details.
+
+Notes:
+
+- interesting that faber chose these indices over others?
+
+####Importing the data into R
+
+Each asset's class price series has been saved as a CSV. The packages used for performance analysis and backtesting require the data to be xts objects which are created by the following code.
+
+```{r}
+#Import saved pricing data csv files as xts
+rm(list = ls())
+
+require(quantstrat)
+symbols <- c("SP500","EAFE","US10YR","GSCI","NAREIT")
+
+getSymbols(symbols,
+           src = "csv",
+           dir="FinalData",
+           col.names=c("Close"))
+
+```
+
+To do:
+
+- hide output in html?
+
+#### Manipulating the data
+
+Once the data is loaded i can create one xts object for the prices and calculate each asset class's returns. The asset class returns are then charted to replicate figure 3 on page 16.
+
+```{r}
+AllAssets <- cbind.xts(Cl(SP500),
+                       Cl(EAFE),
+                       Cl(US10YR),
+                       Cl(GSCI),
+                       Cl(NAREIT))                       
+
+AllAssets <- AllAssets["1972-12-31::2016-12-31"]
+colnames(AllAssets) <- symbols
+
+AllAssets.ret <- Return.calculate(AllAssets)[-1,]
+AllAssets.cumret <- 100*cumprod(1+ ROC(AllAssets, type = "discrete")[-1,])
+
+chart.TimeSeries(AllAssets.cumret["1972-12-31::2012-12-31"],
+                 main = "Figure 3 - Asset Class Returns 1973-2012, Log Scale",
+                 #lty = "2",
+                 ylab = "",
+                 ylog = TRUE,
+                 ylim = c(40,6000),
+                 date.format = "%Y",
+                 major.ticks = "years",
+                 legend.loc = "bottomright",
+                 colorset = 1:12, #bluefocus, #create own colorset at some point
+                 minor.ticks =FALSE)
+```
+
+To do:
+
+- get data and create returns for T-bills and cpi to add to chart
+- create own colourset
+
+####Analysing returns and drawdowns.
+
+
+```{r}
+table.AnnualizedReturns(AllAssets.ret["1972-12-31::2012-12-31"], 
+                        scale = 12, 
+                        Rf = ((1+0.0541)^(1/12))-1, #not same as 5.41%?
+                        geometric = TRUE, 
+                        digits = 4)
+
+round(maxDrawdown(AllAssets.ret["1972-12-31::2012-12-31"], weights = NULL, geometric = TRUE, invert = FALSE),4)
+
+```
+
+To do:
+- confirm correct rate for Rf (Faber uses 5.41%)
+- create one table similar to figure 4 page 17
+- format into percentages
+- also create table showing differences?
+
+####Drawdown chart
+
+To give the reader a visual perspective of drawdowns, faber shows the drawdowns for the S&P from 1900-2012
+
+```{r}
+chart.Drawdown(AllAssets.ret$`SP500`["1972-12-31::2012-12-31"],
+               main = "Figure 5 - S&P Drawdowns 1972-2012",
+               ylab = "",
+               date.format = "%Y",
+               major.ticks = "years",
+               colorset = redfocus)
+
+```
+
+To do:
+- get data for the S&P500 TR from 1900
+- Do for all assets in loop?
+
+####Managing Risk 
+
+Faber introduces a timing system for investors to use to manage the risk.... using a 10 month simple moving average timing model
+
+```{r}
+myChart_Theme <- chart_theme() #Create a chart_theme
+myChart_Theme$col$line.col <- "blue"
+
+SMAperiod <- 10
+
+chart_Series(Cl(SP500),
+             name = "Figure 6 - S&P vs 10 Month Simple Moving Average",
+             theme=myChart_Theme,
+             type = "line",
+             subset = "1989-12-31::2012-12-31",
+             TA = 'add_SMA(n=SMAperiod, on=1, col="red")'
+             )
+```
+
+
+#### S&P 500 from 1901 - 2012
+
+create trading strategy,
+
+
+
+
+After replicating... Lets analysed what has happened since 2012 adding another 4 years of data.
+ 
+

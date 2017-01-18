@@ -1,0 +1,149 @@
+---
+title: "Reproduction of Faber 2012"
+output: html_notebook
+---
+
+###So whats changed since 2012? 
+
+Loading data until 2016
+
+```{r}
+require(quantstrat)
+
+#Import saved pricing data csv files as xts
+rm(list = ls())
+
+symbols <- c("SP500","EAFE","US10YR","GSCI","NAREIT")
+
+getSymbols(symbols,
+           src = "csv",
+           dir="FinalData",
+           col.names=c("Close"))
+
+```
+
+To do:
+
+- make output quiet
+
+#### Manipulating the data
+
+```{r}
+AllAssets <- cbind.xts(Cl(SP500),
+                       Cl(EAFE),
+                       Cl(US10YR),
+                       Cl(GSCI),
+                       Cl(NAREIT))                       
+
+AllAssets <- AllAssets["1972-12-31::2016-12-31"]
+colnames(AllAssets) <- symbols
+
+AllAssets.ret <- Return.calculate(AllAssets)[-1,]
+AllAssets.cumret <- 100*cumprod(1+ ROC(AllAssets, type = "discrete")[-1,])
+
+chart.TimeSeries(AllAssets.cumret,
+                 main = "Figure 3 - Asset Class Returns 1973-2016, Log Scale",
+                 #lty = "2",
+                 ylab = "",
+                 ylog = TRUE,
+                 ylim = c(40,6000),
+                 date.format = "%Y",
+                 major.ticks = "years",
+                 legend.loc = "bottomright",
+                 colorset = 1:12, #bluefocus, #create own colorset at some point
+                 minor.ticks =FALSE)
+
+chart.TimeSeries(AllAssets.cumret["2012::2016"],
+                 main = "Figure 3 - Asset Class Returns 1973-2012, Log Scale",
+                 #lty = "2",
+                 ylab = "",
+                 ylog = FALSE,
+                 #ylim = c(40,6000),
+                 date.format = "%Y",
+                 major.ticks = "years",
+                 legend.loc = "topleft",
+                 colorset = 1:12, #bluefocus, #create own colorset at some point
+                 minor.ticks =FALSE)
+
+```
+
+Whats changed:
+
+- Commodities have had negative returns
+
+
+####Analysing returns and drawdowns.
+
+```{r}
+Originalreturns <- table.AnnualizedReturns(AllAssets.ret["1972-12-31::2012-12-31"], 
+                        scale = 12, 
+                        Rf = ((1+0.0541)^(1/12))-1, #not same as 5.41%?
+                        geometric = TRUE, 
+                        digits = 4)
+Extendedreturns <- table.AnnualizedReturns(AllAssets.ret["1972-12-31::2016-12-31"], 
+                        scale = 12, 
+                        Rf = ((1+0.0541)^(1/12))-1, #not same as 5.41%?
+                        geometric = TRUE, 
+                        digits = 4)
+
+Originalreturns
+Extendedreturns
+
+Change <- Extendedreturns - Originalreturns
+Change
+```
+
+Changes:
+
+- S&P500 has improved returns, lower std dev and a better sharp ratio
+- EAFE0 has lower returns, lower std dev amd a worse sharp ratio
+- US10YR has lower returns, lower stdev and a much worse sharp ratio
+- GSCI has much lower returns for much the same volatility resulting in a much worse sharp ratio thats close to 0
+- NAREIT is relatively unchanged - slightly lower stdev gives it a slight better sharpe ratio
+
+```{r}
+MaxDD <- rbind(round(maxDrawdown(AllAssets.ret["1972-12-31::2012-12-31"], weights = NULL, geometric = TRUE, invert = FALSE),4),
+      round(maxDrawdown(AllAssets.ret["1972-12-31::2016-12-31"], weights = NULL, geometric = TRUE, invert = FALSE),4))
+rownames(MaxDD) <- c("1973-2012","1973-2016")
+print(MaxDD)
+```
+Changes:
+
+- GSCI in a much larger drawdown (81%)
+
+####Drawdown chart
+
+```{r}
+chart.Drawdown(AllAssets.ret$`GSCI`["1972-12-31::2016-12-31"],
+               main = "GSCI Drawdowns 1973-2016",
+               ylab = "",
+               date.format = "%Y",
+               major.ticks = "years",
+               colorset = redfocus)
+
+```
+
+####Managing Risk 
+
+Faber introduces a timing system for investors to use to manage the risk.... using a 10 month simple moving average timing model
+
+```{r}
+myChart_Theme <- chart_theme() #Create a chart_theme
+myChart_Theme$col$line.col <- "blue"
+
+SMAperiod <- 10
+
+chart_Series(Cl(GSCI),
+             name = "GSCI vs 10 Month Simple Moving Average",
+             theme=myChart_Theme,
+             type = "line",
+             subset = "1990-12-31::2016-12-31",
+             TA = 'add_SMA(n=SMAperiod, on=1, col="red")'
+             )
+```
+
+Thoughts:
+
+- GSCI no longer a diversifying asset?
+- Or has timing signal removed exposure to it in 2014, saving the strategy from most of the drawdown and still should be included.
+
