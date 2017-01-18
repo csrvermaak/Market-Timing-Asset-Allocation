@@ -1,0 +1,85 @@
+---
+title: "Bloomberg Data Download"
+output: html_notebook
+---
+
+This file downloads data for SP500, EAFE, GSCI and NAREIT 
+
+Data is monthly between 31/12/1971 until 31/12/2016. Indices are total return indices provided by bloomberg. 
+
+```{r}
+#remove objects in workspace
+rm(list=ls()[! ls() %in% c("object1","object2")]) #remove all but the objects you define e.g. object1 and object2
+
+#load required packages
+library(Rblpapi)
+library(quantstrat) 
+library(quantmod)
+library(PerformanceAnalytics)
+blpConnect()
+```
+
+```{r}
+#Download bloomberg data for indices Faber used
+symbols <- c("SPTR2 Index", "GDDUEAFE INDEX", "SPGSCITR INDEX","FNCOTR Index")
+start.date <- as.Date("1971-12-31")
+end.date <- as.Date("2016-12-31")
+#opt <- c("periodicitySelection"="MONTHLY")is there an option for last day of the month? include non trading days?
+BloombergData <- bdh(securities = symbols, 
+            c("PX_LAST"), 
+            start.date= start.date,
+            end.date = end.date,
+            #options=opt
+            )
+
+rm(symbols,start.date,end.date)
+```
+
+```{r}
+#convert Bloomberg data into individual xts files (to do later see if i can do in Rblpapi download as xts? or create a function/loop?)
+#note using opt <- c("periodicitySelection"="MONTHLY") in the BDH results in different last days of the month to fred
+
+SP500 <- xts(BloombergData$`SPTR2 Index`[,-1],BloombergData$`SPTR2 Index`[,1])
+#colnames(SP500) <- c("SP500.Close")
+SP500 <- to.monthly(SP500,indexAt='lastof',drop.time=TRUE)[,4] #convert to monthly
+
+EAFE <- xts(BloombergData$`GDDUEAFE INDEX`[,-1],BloombergData$`GDDUEAFE INDEX`[,1])
+EAFE <- to.monthly(EAFE,indexAt='lastof',drop.time=TRUE)[,4] #convert to monthly
+
+GSCI <- xts(BloombergData$`SPGSCITR INDEX`[,-1],BloombergData$`SPGSCITR INDEX`[,1])
+GSCI <- to.monthly(GSCI,indexAt='lastof',drop.time=TRUE)[,4] #convert to monthly
+
+NAREIT <- xts(BloombergData$`FNCOTR Index`[,-1],BloombergData$`FNCOTR Index`[,1])
+NAREIT <- to.monthly(NAREIT,indexAt='lastof',drop.time=TRUE)[,4] #convert to monthly
+
+rm(BloombergData)
+```
+
+```{r}
+#save as CSV files
+write.zoo(SP500, file="FinalData/SP500.csv", sep=",")
+write.zoo(NAREIT, file="FinalData/NAREIT.csv", sep=",")
+write.zoo(EAFE, file="FinalData/EAFE.csv", sep=",")
+write.zoo(GSCI, file="FinalData/GSCI.csv", sep=",")
+
+```
+
+```{r}
+#Import saved bloomberg csv files into new xts object - copy this into any other R files that need the research
+rm(list = ls()) #EAFE,GSCI,NAREIT,SP500
+
+symbols <- c("SP500","EAFE","US10YR","GSCI","NAREIT")
+
+getSymbols(symbols,
+           src = "csv",
+           dir="FinalData",
+           #from=startDate,
+           #to=endDate,
+           col.names=c("Close")
+           #auto.assign=TRUE,
+           #index.class=c("POSIXt","POSIXct"),
+           #adjust = TRUE
+           )
+
+rm(symbols)
+```

@@ -1,0 +1,82 @@
+---
+title: "Importing Fred Data"
+output: html_notebook
+---
+
+This file downloads and creates a total return price series for US10YR bonds using data from Fred. 
+
+Data is monthly between 31/12/1971 until 31/12/2016. Indices are total return indices provided by bloomberg. 
+
+```{r}
+#remove objects in workspace
+rm(list=ls()[! ls() %in% c("object1","object2")]) #remove all but the objects you define e.g. object1 and object2
+
+#load required packages
+library(RQuantLib)
+library(quantstrat) 
+library(quantmod)
+library(PerformanceAnalytics)
+```
+
+```{r}
+#Download FRED data for 10Yr US Bonds
+start.date <- as.Date("1971-12-31")
+end.date <- as.Date("2016-12-31")
+
+getSymbols("DGS10", src="FRED") #download data
+
+US10YR.yield <- to.monthly(DGS10,indexAt='lastof',drop.time=TRUE)[,4] #convert to monthly
+US10YR.yield <- US10YR.yield[paste(start.date,end.date,sep="/")] #subset to required period
+
+rm(i, start.date,end.date)
+```
+
+Now we have the yields we have to create a total return index. I've adapted a method from http://timelyportfolio.blogspot.co.za/2011/04/historical-bond-price-and-total-returns.html 
+
+```{r}
+
+US10YR.return <- US10YR.yield #set this up to hold price returns
+US10YR.return[1,1]<-0
+colnames(US10YR.return)<-"PriceReturn"
+
+for (i in 1:(NROW(US10YR.yield)-1)) {
+  US10YR.return[i+1,1]<-FixedRateBondPriceByYield(yield=US10YR.yield[i+1,1]/100,issueDate=Sys.Date(), 
+                                                     maturityDate= advance("UnitedStates/GovernmentBond", Sys.Date(), 10, 3),
+                                                     rates=US10YR.yield[i,1]/100,period=2)[1]/100-1
+}
+
+#Total return will be the price return + the previous months yield for one month
+US10YR.totalreturn<-US10YR.return+lag(US10YR.yield,k=1)/12/100
+US10YR.totalreturn[1,1]<-0
+colnames(US10YR.totalreturn)<-"Total Return"
+
+#Now we need to create a price index with base 100
+US10YR <- cumprod(1 + US10YR.totalreturn) * 100
+
+colnames(US10YR) <- c("US10YR.Close")
+```
+
+```{r}
+#save as CSV files
+write.zoo(US10YR, file="FinalData/US10YR.csv", sep=",")
+```
+
+```{r}
+#Import saved US10YR csv file into new xts object - copy this into any other R files that need the research
+rm(list = ls()) 
+
+symbols <- c("SP500","EAFE","US10YR","GSCI","NAREIT")
+
+getSymbols(symbols,
+           src = "csv",
+           dir="FinalData",
+           #from=startDate,
+           #to=endDate,
+           col.names=c("Close")
+           #auto.assign=TRUE,
+           #index.class=c("POSIXt","POSIXct"),
+           #adjust = TRUE
+           )
+
+rm(symbols)
+```
